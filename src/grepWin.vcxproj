@@ -316,6 +316,7 @@
     <ClInclude Include="Theme.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\.github\workflows\msbuild.yml" />
     <None Include="..\default.build">
       <SubType>Designer</SubType>
     </None>
