@@ -82,7 +82,28 @@ namespace
 constexpr auto SearchEditSubclassID = 4321;
 std::wstring   g_utf8ReplaceWarningShownForSearchPath;
 
-void           drawRedEditBox(HWND hWnd, WPARAM wParam)
+// Theme-aware color helper
+struct ThemeColors
+{
+    static COLORREF GetInvalidBorderColor(bool isDark)
+    {
+        return isDark ? RGB(200, 60, 60)  // Darker red for dark theme
+                      : RGB(236, 93, 93); // Bright red for light theme
+    }
+
+    static COLORREF GetHighlightColor(bool isDark)
+    {
+        return isDark ? RGB(180, 180, 50) // Muted yellow for dark theme
+                      : RGB(255, 255, 0); // Bright yellow for light theme
+    }
+
+    static BYTE GetHighlightAlpha(bool isDark)
+    {
+        return isDark ? 120 : 92; // More opaque in dark mode (47% vs 36%)
+    }
+};
+
+void drawRedEditBox(HWND hWnd, WPARAM wParam, bool isDark)
 {
     // make the border of the edit control red in case
     // the regex is invalid
@@ -94,7 +115,7 @@ void           drawRedEditBox(HWND hWnd, WPARAM wParam)
     RECT rc = {};
     GetWindowRect(hWnd, &rc);
     MapWindowPoints(nullptr, hWnd, reinterpret_cast<LPPOINT>(&rc), 2);
-    ::SetBkColor(hdc, RGB(236, 93, 93));
+    ::SetBkColor(hdc, ThemeColors::GetInvalidBorderColor(isDark));
     ::ExtTextOut(hdc, 0, 0, ETO_OPAQUE, &rc, nullptr, 0, nullptr);
     ReleaseDC(hWnd, hdc);
 }
@@ -108,7 +129,7 @@ LRESULT CALLBACK SearchPathWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
             auto searchDlg = reinterpret_cast<CSearchDlg*>(dwRefData);
             if (!searchDlg->isSearchPathValid())
             {
-                drawRedEditBox(hWnd, wParam);
+                drawRedEditBox(hWnd, wParam, searchDlg->GetDarkModeState());
                 return 0;
             }
         }
@@ -128,7 +149,7 @@ LRESULT CALLBACK SearchEditWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
             auto searchDlg = reinterpret_cast<CSearchDlg*>(dwRefData);
             if (!searchDlg->isSearchValid())
             {
-                drawRedEditBox(hWnd, wParam);
+                drawRedEditBox(hWnd, wParam, searchDlg->GetDarkModeState());
                 return 0;
             }
         }
@@ -148,7 +169,7 @@ LRESULT CALLBACK ExcludeDirEditWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
             auto searchDlg = reinterpret_cast<CSearchDlg*>(dwRefData);
             if (!searchDlg->isExcludeDirsRegexValid())
             {
-                drawRedEditBox(hWnd, wParam);
+                drawRedEditBox(hWnd, wParam, searchDlg->GetDarkModeState());
                 return 0;
             }
         }
@@ -168,7 +189,7 @@ LRESULT CALLBACK FileNameMatchEditWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
             auto searchDlg = reinterpret_cast<CSearchDlg*>(dwRefData);
             if (!searchDlg->isFileNameMatchRegexValid())
             {
-                drawRedEditBox(hWnd, wParam);
+                drawRedEditBox(hWnd, wParam, searchDlg->GetDarkModeState());
                 return 0;
             }
         }
@@ -336,6 +357,7 @@ CSearchDlg::CSearchDlg(HWND hParent)
     , m_bExcludeDirsRegexValid(true)
     , m_bFileNameMatchingRegexValid(true)
     , m_themeCallbackId(0)
+    , m_isDarkMode(false)
     , m_pDropTarget(nullptr)
     , m_autoCompleteFilePatterns(bPortable ? &g_iniFile : nullptr)
     , m_autoCompleteExcludeDirsPatterns(bPortable ? &g_iniFile : nullptr)
@@ -381,6 +403,12 @@ CSearchDlg::~CSearchDlg()
 {
 }
 
+void CSearchDlg::SetShowContent()
+{
+    m_showContent    = true;
+    m_showContentSet = true;
+}
+
 bool CSearchDlg::isSearchPathValid() const
 {
     return m_bSearchPathValid;
@@ -400,6 +428,11 @@ bool CSearchDlg::isExcludeDirsRegexValid() const
 bool CSearchDlg::isFileNameMatchRegexValid() const
 {
     return m_bFileNameMatchingRegexValid;
+}
+
+bool CSearchDlg::GetDarkModeState() const
+{
+    return m_isDarkMode;
 }
 
 void CSearchDlg::SetSearchModeUI(bool isTextMode)
@@ -441,13 +474,21 @@ LRESULT CSearchDlg::DlgFunc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 
             m_themeCallbackId = CTheme::Instance().RegisterThemeChangeCallback(
                 [this]() {
-                    auto bDark = CTheme::Instance().IsDarkTheme();
+                    auto bDark   = CTheme::Instance().IsDarkTheme();
+                    m_isDarkMode = bDark; // Store dark mode state
                     DarkModeHelper::Instance().AllowDarkModeForApp(bDark);
                     CTheme::Instance().SetThemeForDialog(*this, bDark);
                     DarkModeHelper::Instance().AllowDarkModeForWindow(GetToolTipHWND(), bDark);
                     DarkModeHelper::Instance().RefreshTitleBarThemeColor(*this, bDark);
+
+                    // Update size grip for theme
+                    m_resizer.UseSizeGrip(!bDark);
+
+                    // Force redraw to update colors
+                    InvalidateRect(*this, nullptr, TRUE);
                 });
-            auto bDark = CTheme::Instance().IsDarkTheme();
+            auto bDark   = CTheme::Instance().IsDarkTheme();
+            m_isDarkMode = bDark; // Initialize dark mode state
             if (bDark)
                 DarkModeHelper::Instance().AllowDarkModeForApp(bDark);
             CTheme::Instance().SetThemeForDialog(*this, CTheme::Instance().IsDarkTheme());
@@ -717,7 +758,7 @@ LRESULT CSearchDlg::DlgFunc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
             AdjustControlSize(IDC_RESULTCONTENT);
 
             m_resizer.Init(hwndDlg);
-            m_resizer.UseSizeGrip(!CTheme::Instance().IsDarkTheme());
+            m_resizer.UseSizeGrip(!m_isDarkMode);
             m_resizer.AddControl(hwndDlg, IDC_HELPLABEL, RESIZER_TOPLEFT);
             m_resizer.AddControl(hwndDlg, IDC_ABOUTLINK, RESIZER_TOPRIGHT);
             m_resizer.AddControl(hwndDlg, IDC_GROUPSEARCHIN, RESIZER_TOPLEFTRIGHT);
@@ -1125,6 +1166,25 @@ LRESULT CSearchDlg::DlgFunc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                 break;
                 default:
                     break;
+            }
+        }
+        break;
+        case WM_SETTINGCHANGE:
+        {
+            // Detect system theme changes (Windows 10 1903+)
+            if (lParam && lstrcmp(reinterpret_cast<LPCWSTR>(lParam), L"ImmersiveColorSet") == 0)
+            {
+                // System theme changed, update our dark mode state
+                m_isDarkMode = CTheme::Instance().IsDarkTheme();
+                DarkModeHelper::Instance().AllowDarkModeForApp(m_isDarkMode);
+                CTheme::Instance().SetThemeForDialog(*this, m_isDarkMode);
+                DarkModeHelper::Instance().RefreshTitleBarThemeColor(*this, m_isDarkMode);
+
+                // Update size grip
+                m_resizer.UseSizeGrip(!m_isDarkMode);
+
+                // Force redraw of all controls
+                InvalidateRect(*this, nullptr, TRUE);
             }
         }
         break;
@@ -2758,10 +2818,10 @@ LRESULT CSearchDlg::ColorizeMatchResultProc(LPNMLVCUSTOMDRAW lpLVCD)
                     LONG          height  = rc.bottom - rc.top;
                     HDC           hcdc    = CreateCompatibleDC(hdc);
                     BITMAPINFO    bmi     = {{sizeof(BITMAPINFOHEADER), width, height, 1, 32, BI_RGB, static_cast<DWORD>(width * height * 4u), 0, 0, 0, 0}, {{0, 0, 0, 0}}};
-                    BLENDFUNCTION blend   = {AC_SRC_OVER, 0, 92, 0}; // 36%
+                    BLENDFUNCTION blend   = {AC_SRC_OVER, 0, ThemeColors::GetHighlightAlpha(m_isDarkMode), 0};
                     HBITMAP       hBitmap = CreateDIBSection(hcdc, &bmi, DIB_RGB_COLORS, nullptr, nullptr, 0x0);
                     auto          oldBmp  = SelectObject(hcdc, hBitmap);
-                    auto          brush   = CreateSolidBrush(RGB(255, 255, 0));
+                    auto          brush   = CreateSolidBrush(ThemeColors::GetHighlightColor(m_isDarkMode));
                     rc2                   = {0, 0, width, height};
                     FillRect(hcdc, &rc2, brush);
                     AlphaBlend(hdc, rc.left, rc.top, width, height, hcdc, 0, 0, width, height, blend);
