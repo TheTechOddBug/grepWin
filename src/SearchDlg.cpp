@@ -1320,7 +1320,7 @@ LRESULT CSearchDlg::DoCommand(int id, int msg)
                 if (!m_bUseRegex && m_bWholeWords)
                 {
                     // check if the search string contains only word characters, otherwise whole word search is not possible
-                    bool hasOnlyWordChars = true;  
+                    bool hasOnlyWordChars = true;
                     for (wchar_t ch : m_searchString)
                     {
                         if (!iswalnum(ch) && ch != L'_')
@@ -2754,7 +2754,7 @@ LRESULT CSearchDlg::ColorizeMatchResultProc(LPNMLVCUSTOMDRAW lpLVCD)
                         rc.right = rc.left + width;
                     }
 
-                    width = rc.right - rc.left;
+                    width                 = rc.right - rc.left;
                     LONG          height  = rc.bottom - rc.top;
                     HDC           hcdc    = CreateCompatibleDC(hdc);
                     BITMAPINFO    bmi     = {{sizeof(BITMAPINFOHEADER), width, height, 1, 32, BI_RGB, static_cast<DWORD>(width * height * 4u), 0, 0, 0, 0}, {{0, 0, 0, 0}}};
@@ -2762,7 +2762,7 @@ LRESULT CSearchDlg::ColorizeMatchResultProc(LPNMLVCUSTOMDRAW lpLVCD)
                     HBITMAP       hBitmap = CreateDIBSection(hcdc, &bmi, DIB_RGB_COLORS, nullptr, nullptr, 0x0);
                     auto          oldBmp  = SelectObject(hcdc, hBitmap);
                     auto          brush   = CreateSolidBrush(RGB(255, 255, 0));
-                    rc2 = {0, 0, width, height};
+                    rc2                   = {0, 0, width, height};
                     FillRect(hcdc, &rc2, brush);
                     AlphaBlend(hdc, rc.left, rc.top, width, height, hcdc, 0, 0, width, height, blend);
                     SelectObject(hcdc, oldBmp);
@@ -3825,7 +3825,8 @@ DWORD CSearchDlg::SearchThread()
                     auto searchFn = [=]() {
                         SearchFile(sInfo, searchRoot);
                     };
-                    tp.enqueueWait(searchFn);
+                    searchFn();
+                    // tp.enqueueWait(searchFn);
                 }
             }
             else if (!bIsDirectory || (bCountingOnly && m_patternRegex.empty()))
@@ -4376,11 +4377,32 @@ std::basic_string<char> ConvertToString<char>(const std::wstring& str, CTextFile
     switch (encoding)
     {
         case CTextFile::Unicode_Le:
-            return std::basic_string<char>(reinterpret_cast<const char*>(str.c_str()), 2 * str.length());
         case CTextFile::Unicode_Be:
         {
-            std::wstring strBe = utf16Swap(str);
-            return std::basic_string<char>(reinterpret_cast<const char*>(strBe.c_str()), 2 * strBe.length());
+            std::string strLe;
+            bool        lastWasBackslash = false;
+            for (const auto& ch : str)
+            {
+                if (lastWasBackslash)
+                    strLe += CUnicodeUtils::StdGetUTF8(std::wstring(1, ch));
+                else
+                {
+                    if (ch == '\\')
+                        strLe += '\\';
+                    else if (encoding == CTextFile::Unicode_Be)
+                    {
+                        strLe += static_cast<char>(ch & 0xFF);
+                        strLe += static_cast<char>((ch >> 8) & 0xFF);
+                    }
+                    else
+                    {
+                        strLe += static_cast<char>((ch >> 8) & 0xFF);
+                        strLe += static_cast<char>(ch & 0xFF);
+                    }
+                }
+                lastWasBackslash = (ch == '\\');
+            }
+            return strLe;
         }
         case CTextFile::Ansi:
             return CUnicodeUtils::StdGetANSI(str);
