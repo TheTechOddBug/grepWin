@@ -484,6 +484,9 @@ LRESULT CSearchDlg::DlgFunc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                     // Update size grip for theme
                     m_resizer.UseSizeGrip(!bDark);
 
+                    // Reapply Mica backdrop (it adapts to theme automatically)
+                    DarkModeHelper::ApplyMicaBackdrop(*this);
+
                     // Force redraw to update colors
                     InvalidateRect(*this, nullptr, TRUE);
                 });
@@ -831,6 +834,9 @@ LRESULT CSearchDlg::DlgFunc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 
             InitDialog(hwndDlg, IDI_GREPWIN);
 
+            // Apply Windows 11 Mica backdrop effect
+            DarkModeHelper::ApplyMicaBackdrop(*this);
+
             WINDOWPLACEMENT wpl       = {};
             DWORD           size      = sizeof(wpl);
             std::wstring    winPosKey = L"windowpos_" + GetMonitorSetupHash();
@@ -964,6 +970,10 @@ LRESULT CSearchDlg::DlgFunc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             if (!hSplitMenu)
                                 break;
                             OnOutOfScope(DestroyMenu(hSplitMenu));
+
+                            // Enable dark mode for the menu
+                            DarkModeHelper::EnableDarkModeForMenu(*this, m_isDarkMode);
+
                             if (pDropDown->hdr.hwndFrom == GetDlgItem(*this, IDOK))
                             {
                                 auto buf    = GetDlgItemText(IDC_SEARCHPATH);
@@ -1182,6 +1192,9 @@ LRESULT CSearchDlg::DlgFunc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 
                 // Update size grip
                 m_resizer.UseSizeGrip(!m_isDarkMode);
+
+                // Reapply Mica backdrop
+                DarkModeHelper::ApplyMicaBackdrop(*this);
 
                 // Force redraw of all controls
                 InvalidateRect(*this, nullptr, TRUE);
@@ -2328,6 +2341,10 @@ void CSearchDlg::ShowContextMenu(HWND hWnd, int x, int y)
             if (hMenu)
             {
                 OnOutOfScope(DestroyMenu(hMenu));
+
+                // Enable dark mode for the menu
+                DarkModeHelper::EnableDarkModeForMenu(*this, m_isDarkMode);
+
                 auto sCopyColumn    = TranslatedString(hResource, IDS_COPY_COLUMN);
                 auto sCopyColumnSel = TranslatedString(hResource, IDS_COPY_COLUMN_SEL);
                 AppendMenu(hMenu, MF_STRING, 1, sCopyColumn.c_str());
