@@ -42,6 +42,10 @@ jobs:
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v2
 
+    - name: Integrate vcpkg
+      run: |
+        & "${{github.workspace}}\vcpkg\vcpkg.exe" integrate install
+
     - name: Restore NuGet packages
       working-directory: ${{env.GITHUB_WORKSPACE}}
       run: nuget restore ${{env.SOLUTION_FILE_PATH}}
@@ -60,7 +64,7 @@ jobs:
         sed -i "s/\`$MicroVersion\`$/$MicroVersion/gm" ./src/last/version.h ./src/Setup/VersionNumberInclude.wxi
         sed -i "s/\`$WCREV\`$/$WCREV/gm" ./src/last/version.h ./src/Setup/VersionNumberInclude.wxi
         sed -i "s/\`$WCDATE\`$/$WCDATE/gm" ./src/last/version.h
-        msbuild -m -p:Configuration=${{env.BUILD_CONFIGURATION}} -p:Platform=${{matrix.platform}} -p:VcpkgEnableManifest=true -warnAsError ${{env.SOLUTION_FILE_PATH}}
+        msbuild -m -p:Configuration=${{env.BUILD_CONFIGURATION}} -p:Platform=${{matrix.platform}} -warnAsError ${{env.SOLUTION_FILE_PATH}}
         Copy-Item "./bin/${{matrix.dir}}/grepWin.exe" -Destination "./bin/${{matrix.dir}}/grepWin-${{matrix.platform}}_portable.exe"
         Set-Location -Path "./src/Setup"
         if ("${{matrix.platform}}" -eq "x64") {
