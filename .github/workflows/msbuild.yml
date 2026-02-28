@@ -34,17 +34,12 @@ jobs:
         fetch-depth: 0
         submodules: recursive
 
-    - name: Setup vcpkg
-      uses: lukka/run-vcpkg@v11
-      with:
-        vcpkgGitCommitId: 'c8696863d371ab7f46e213d8f5ca923c4aef2a00'
-
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v2
 
     - name: Integrate vcpkg
       run: |
-        & "${{github.workspace}}\vcpkg\vcpkg.exe" integrate install
+        & "vcpkg.exe" integrate install
 
     - name: Restore NuGet packages
       working-directory: ${{env.GITHUB_WORKSPACE}}
